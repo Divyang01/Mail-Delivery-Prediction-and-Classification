@@ -1,0 +1,449 @@
+---
+title: "Prediction"
+author: "Divyang Vinubhai Hirpara"
+date: "13/03/2023"
+output:
+  word_document: default
+  pdf_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(fig.width=5, fig.height=5,
+                      fig.path='Figs/', echo = TRUE)
+#This sets the working directory
+knitr::opts_knit$set(root.dir = 'C:/Users/hirpa/Documents/Github/Mail-Delivery-Prediction-and-Classification/DATA')
+```
+
+```{r,include=FALSE}
+#It will clear all the plots, the console and the work-space.* *It also sets the overall format for numbers.
+if(!is.null(dev.list())) dev.off()
+cat("\014") 
+rm(list=ls())
+options(scipen=9)
+```
+
+```{r, include=FALSE}
+if(!require(HSAUR)){install.packages("HSAUR")}
+library("HSAUR")
+
+if(!require(pastecs)){install.packages("pastecs")}
+library("pastecs")
+
+if(!require(lattice)){install.packages("lattice")}
+library("lattice")
+
+if(!require(corrgram)){install.packages("corrgram")}
+library("corrgram")
+```
+
+## 1. Preliminary and Exploratory
+
+### 1. Rename all variables with your initials appended
+
+```{r}
+data_DVH <- read.table("PROG8430_Assign_dataset.txt",sep=",",header = TRUE)
+head(data_DVH)
+```
+
+**Interpretation**
+
+-   The text(.txt) file shall be read with 'read.table' function in R.
+
+-   Text file is comma separated hence, sep=" ," is used to identify a rows and column.
+
+-   Header=TRUE is used due to the text file is generated with header in first line.
+
+-   By default, 6 records are displayed with 'head()' function as shown above.
+
+-   There are total 9 columns of DL,VN, PG, CS, ML, DM, HZ, CR and WT with different datatype.
+
+***`Rename Variables of column name`***
+
+```{r}
+#Append data_DVH initials to column names
+colnames(data_DVH) <- paste(colnames(data_DVH), "DVH", sep = "_")
+head(data_DVH)
+```
+
+**Interpretation**\
+Every column are replaced with initials.\
+DL --\> DL_DVH\
+VN --\> VN_DVH\
+PG --\> PG_DVH\
+CS --\> CS_DVH\
+ML --\> ML_DVH\
+DM --\> DM_DH\
+HZ --\> HZ_DH\
+CR --\> CR_DVH\
+WT --\> WT_DVH
+
+### 2. Examine the data using the exploratory techniques we have learned in class. Does the data look reasonable? Are there any outliers? If so, deal with them appropriately.
+
+***`Find Missing Value if any`***
+
+```{r}
+summary(data_DVH)
+```
+
+**Interpretation**\
+Looking at the above summary table of all columns, it seems there is no missing value available in any column.\
+If any missing value is available in any column, it is supposed to look like this - NA's 2. where 2 represents the number of missing values.
+
+***`Look for coefficient of Variance`***
+
+```{r}
+stat.desc(data_DVH)  #Consider coef of var
+```
+
+**Interpretation**\
+From the above stat values, it seems there is not likely very low value of Coef.var.
+
+***`Look for Correlation Filter between variables`***
+
+```{r}
+numeric_data_DVH <- data_DVH[-c(6:8)]
+cor(numeric_data_DVH,method="spearman")
+```
+
+**Interpretation**\
+With Correlation function cor(), method="spearman" basically it refers to calculation of the Spearman's rank correlation coefficient. It helps find the high correlation between two variable.\
+From above values, there are no variables available with high correlation value.\
+
+Hence, there is no need to drop any variables.
+
+***`Look for outliers with Box Plot`***
+
+```{r}
+boxplot(data_DVH$DL_DVH, horizontal=TRUE, pch=4, col=5, border = 2, main="Box plot of Time for Delivery")
+boxplot(data_DVH$VN_DVH, horizontal=TRUE, pch=4,col=5, border = 2, main="Box plot of Vintage of Product")
+boxplot(data_DVH$PG_DVH, horizontal=TRUE, pch=4,col=5, border = 2, main="Box plot of Package of Product")
+boxplot(data_DVH$CS_DVH, horizontal=TRUE, pch=4,col=5, border = 2, main="Box plot of Customer's Past Order")
+boxplot(data_DVH$ML_DVH, horizontal=TRUE, pch=4,col=5, border = 2, main="Box plot of Distanse of order")
+boxplot(data_DVH$WT_DVH, horizontal=TRUE, pch=4,col=5, border = 2, main="Box plot of Weight of shipment")
+```
+
+```{r}
+densityplot( ~ data_DVH$DL_DVH, pch=8,main="density plot of Time for Delivery",xlab="Time for Delivery")
+densityplot( ~ data_DVH$VN_DVH, pch=8,main="density plot of Vintage of Product",xlab="Vintage of Product")
+densityplot( ~ data_DVH$PG_DVH, pch=8,main="density plot of Package of Product",xlab="Package of Product")
+densityplot( ~ data_DVH$CS_DVH, pch=8,main="density plot of Customer's Past Order",xlab="Customer's Past Order")
+densityplot( ~ data_DVH$ML_DVH, pch=8,main="density plot of Distanse of order",xlab="Distanse of order")
+densityplot( ~ data_DVH$WT_DVH, pch=8,main="density plot of Weight of shipment",xlab="Weight of shipment")
+```
+
+**Interpretation**\
+There are a few outliers presented in some column. But, by observing all outliers, no significant outliers are shown in any column. Since, there is one outlier present in Package of Product, which is below zero value and it will add no value for analysis. hence, i will remove it.
+
+```{r}
+nr <- which(data_DVH$PG_DVH < 0)  #Find row number with PG_DVH <= 0
+data_DVH <- data_DVH[-c(nr),]
+
+densityplot( ~ data_DVH$PG_DVH, pch=8,main="density plot of Package of Product",xlab="Package of Product")
+```
+
+**Interpretation**\
+As you can see from above density plot, outlier is successfully removed from Package of Product column.
+
+### 3. Using an appropriate technique from class, determine if there is any evidence if one Carrier has faster delivery times than the other. Make sure you explain the approach you took and your conclusions.
+
+```{r}
+delivery_time_dp_DVH <- data_DVH$DL_DVH[data_DVH$CR_DVH == "Def Post"]
+delivery_time_sd_DVH <- data_DVH$DL_DVH[data_DVH$CR_DVH == "Sup Del"]
+
+t.test(delivery_time_dp_DVH, delivery_time_sd_DVH, var.equal = TRUE)
+```
+
+**Interpretation**
+
+-   The p-value is below 0.05 of t-test . This means that the probability of observing a difference in mean delivery times as extreme or more extreme than the one observed, suggesting strong evidence against the null hypothesis.
+
+-   The 95 percent confidence interval for the difference in means is (-1.3544364, -0.7550164). This means that we are 95 percent confident that the true difference in mean delivery times between Def-Post and Sup-Del. Since the interval does not include 0, there is a statistically significant difference in mean delivery times between the two carriers.
+
+-   Overall, based on this output, i can conclude that there is evidence to suggest that one carrier has faster delivery times than the other for orders designated as Hazardous.
+
+### 4. As demonstrated in class, split the dataframe into a training and a test file. This should be a 80/20 split. For the set.seed(), use the last four digits of your student number. The training set will be used to build the following models and the test set will be used to validate them.
+
+```{r}
+# Set the seed using the last four digits of your student number
+set.seed(6337)
+
+# Split the dataframe into a training and test set using an 80/20 split
+train_index_DVH <- sample(1:nrow(data_DVH), floor(0.8*nrow(data_DVH)), replace = FALSE)
+train_data_DVH <- data_DVH[train_index_DVH, ]
+test_data_DVH <- data_DVH[-train_index_DVH, ]
+```
+
+**Interpretation**\
+The function set.seed(6337) is used to set a fixed seed value for the random number generator, which ensures that the random split is reproducible.\
+The sample() function is then used to randomly sample 80% of the rows of data_DVH for the training set.\
+The floor() function is used to round down to the nearest integer value, as the sample() function requires the sample size to be an integer.\
+The replace = FALSE argument specifies that sampling should be done without replacement.
+
+## 2. Simple Linear Regression
+
+### 1. Correlations: Create both numeric and graphical correlations (as demonstrated in class) and comment on noteworthy correlations you observe. Are these surprising? Do they make sense?
+
+*Here i am representing a relationships between each Numeric individual variable and the target variable, DL.*
+
+```{r}
+# Delivery Time vs Weight (WT)
+cor(data_DVH$DL_DVH, data_DVH$WT_DVH, method="spearman")
+plot(DL_DVH ~ WT_DVH, data = data_DVH,main="Comparing Delivery Time and Weight of Package")
+
+# Delivery Time vs Distance the order needs to be delivered (ML)
+cor(data_DVH$DL_DVH, data_DVH$ML_DVH, method="spearman")
+plot(DL_DVH ~ ML_DVH, data = data_DVH,main="Comparing Delivery Time and Distance of Order")
+
+
+# Delivery Time vs orders the customer has made in the past (CS)
+cor(data_DVH$DL_DVH, data_DVH$CS_DVH, method="spearman")
+plot(DL_DVH ~ CS_DVH, data = data_DVH,main="Comparing Delivery Time and Customer's Order")
+
+# Delivery Time vs Package of Product (PG)
+cor(data_DVH$DL_DVH, data_DVH$PG_DVH, method="spearman")
+plot(DL_DVH ~ PG_DVH, data = data_DVH,main="Comparing Delivery Time and Package of Product")
+
+# Delivery Time vs Vintage of product (VN)
+cor(data_DVH$DL_DVH, data_DVH$VN_DVH, method="spearman")
+plot(DL_DVH ~ VN_DVH, data = data_DVH,main="Comparing Delivery Time and Vintage of product")
+
+
+# Graphical Representation of Correlation
+corrgram(data_DVH, order=TRUE, lower.panel=panel.shade,
+         upper.panel=panel.pie, text.panel=panel.txt,
+         main="Correlations")
+```
+
+**Interpretation**\
+ML, CS and PG have the Positive linear relationships with DL, with correlation coefficients of 0.15, 0.089, and 0.46, respectively. This indicates that there no relationship of this three variable with DL.\
+WT and VT have the Negative linear relationships with DL, with correlation coefficients of -0.33 and -0.02726 respectively. Hence, there is no relationship this two variables with DL.
+
+Also, there is a graphical view of correlation presented above. I have used 'data_DVH' variable that has every columns. Here three columns are ignored due to data type is character, which are DM, HZ, CR.
+
+Overall, these correlations and scatter plots are not particularly surprising. By looking at correlation value of ML, CS, PG, WT and VT with DL, it does not make any sense with Delivery Time.
+
+***NOTE:** I also have used train_data (train_data_DVH) to find correlation and to check whether there is any difference in result or not. Please follow below code.*
+
+```{r}
+# Delivery Time vs Weight (WT)
+cor(train_data_DVH$DL_DVH, train_data_DVH$WT_DVH, method="spearman")
+
+# Delivery Time vs Distance the order needs to be delivered (ML)
+cor(train_data_DVH$DL_DVH, train_data_DVH$ML_DVH, method="spearman")
+
+# Delivery Time vs orders the customer has made in the past (CS)
+cor(train_data_DVH$DL_DVH, train_data_DVH$CS_DVH, method="spearman")
+
+# Delivery Time vs Package of Product (PG)
+cor(train_data_DVH$DL_DVH, train_data_DVH$PG_DVH, method="spearman")
+
+# Delivery Time vs Vintage of product (VN)
+cor(train_data_DVH$DL_DVH, train_data_DVH$VN_DVH, method="spearman")
+
+```
+
+**Interpretation**\
+As you can see from above result, there is no major difference even when checking correlation of train data.
+
+***NOTE:** From now, I am using train_data (train_data_DVH) to find simple linear regression. I will check trained data result with test data (test_data_DVH).*
+
+### 2. Create a simple linear regression model using time for delivery as the dependent variable and weight of the shipment as the independent. Create a scatter plot of the two variables and overlay the regression line.
+
+```{r}
+WTmodel_DVH <- lm(DL_DVH ~ WT_DVH, data=train_data_DVH)
+WTmodel_DVH
+
+plot(DL_DVH ~ WT_DVH, data=train_data_DVH, 
+     main="Delivery Time by Weight (with Regression Line)",
+     xlab="Weight of Shipment",
+     ylab="Delivery Time",
+     col=6,
+     pch=2)
+abline(WTmodel_DVH)
+
+```
+
+### 3. Create a simple linear regression model using time for delivery as the dependent variable and distance the shipment needs to travel as the independent. Create a scatter plot of the two variables and overlay the regression line.
+
+```{r}
+MLmodel_DVH <- lm(DL_DVH ~ ML_DVH, data=train_data_DVH)
+MLmodel_DVH
+
+plot(DL_DVH ~ ML_DVH, data=train_data_DVH, 
+     main="Delivery Time by Distance the order needs to be delivered (with Regression Line)",
+     xlab="Travel Distance of Order ",
+     ylab="Delivery Time",
+     col=7,
+     pch=4)
+abline(MLmodel_DVH)
+
+```
+
+### 4. As demonstrated in class, compare the models (F-Stat, 𝑅2, RMSE for train and test, etc.) Which model is superior? Why?
+
+```{r}
+
+
+## RMSE of Delivery vs Weight for train data
+pred_DlWt_DVH <- predict(WTmodel_DVH, newdata=train_data_DVH)
+RMSE_train_DlWt_DVH <- sqrt(mean((train_data_DVH$DL_DVH - pred_DlWt_DVH)^2))
+
+## RMSE of Delivery vs Weight for Test data
+pred_DlWt_DVH <- predict(WTmodel_DVH, newdata=test_data_DVH)
+RMSE_test_DlWt_DVH <- sqrt(mean((test_data_DVH$DL_DVH - pred_DlWt_DVH)^2))
+
+
+## RMSE of Delivery vs Distance of Order for Train data
+pred_DlMl_DVH <- predict(MLmodel_DVH, newdata=train_data_DVH)
+RMSE_train_DlMl_DVH <- sqrt(mean((train_data_DVH$DL_DVH - pred_DlMl_DVH)^2))
+
+## RMSE of Delivery vs Distance of Order for Test data
+pred_DlMl_DVH <- predict(MLmodel_DVH, newdata=test_data_DVH)
+RMSE_test_DlMl_DVH <- sqrt(mean((test_data_DVH$DL_DVH - pred_DlMl_DVH)^2))
+```
+
+```{r}
+
+cat("----------------------------Model: DL vs WT-----------------------------")
+# Summary model of Delivery Time vs Weight of the shipment
+summary(WTmodel_DVH)
+
+print(paste0("RMSE Train: ",round(RMSE_train_DlWt_DVH,3)))
+print(paste0("RMSE Test: ",round(RMSE_test_DlWt_DVH,3)))
+
+cat("----------------------------Model: DL vs ML-----------------------------")
+# Summary model of Delivery Time vs Distance the order needs to be delivered
+summary(MLmodel_DVH)
+
+print(paste0("RMSE Train: ",round(RMSE_train_DlMl_DVH,3)))
+print(paste0("RMSE Test: ",round(RMSE_test_DlMl_DVH,3)))
+```
+
+**Interpretation**
+
+-   P-value of F-statistic: The p-value of the F-statistic for the DL vs WT model is below 0.05, which indicates that the model is significant at a high level of confidence. The p-value of the F-statistic for the DL vs ML model is above 0.05, which indicates that the model is marginally significant at a 5% level of significance.
+
+-   Adjusted R-squared value: The adjusted R-squared value for the DL vs WT model is 0.1224, which means that the model explains 12.24% of the variability in the response variable, after adjusting for the number of predictors. The adjusted R-squared value for the DL vs ML model is 0.0168, which means that the model explains only 1.68% of the variability in the response variable, after adjusting for the number of predictors. Therefore, the DL vs WT model has a higher adjusted R-squared value and is a better fit for the data.
+
+-   Coefficient and t-test value: For the DL vs WT model, the coefficient estimate for WT_DVH is -0.0066627 with a t-value of -7.413 . This means that the weight of the sample has a significant negative effect on the DL_DVH. For the DL vs ML model, the coefficient estimate for ML_DVH is 0.0005812 with a t-value of 2.759. This means that the distance of order has a marginally significant positive effect on the DL_DVH.
+
+-   RMSE value: The root mean squared error (RMSE) is a measure of how well the model fits the data. A lower RMSE value indicates a better fit of the model to the data. Therefore, the DL vs WT model has a lower RMSE value for both train (1.6) and test(1.611) data compared to DL vs ML model.
+
+Based on the above analysis, I can conclude that the DL vs WT model is a better fit for the data as compared to the DL vs ML model. The DL vs WT model has a lower p-value of F-statistic, higher adjusted R-squared value, significant negative effect of predictor variable, and lower RMSE value for both train and test data.
+
+## 3. Model Development -- Multivariate
+
+### 1. create two models, one using all the variables and the other using backward selection. This should be built using the train set created in Step 2. For each model interpret and comment on the main measures we discussed in class (including RMSE for train and test).
+
+***NOTE:** As dataset has three different variables (DM, HZ, CR) with Character data type. And, This task required to use all variables for model training. Hence, I am changing this data type into Factor type here.*
+
+```{r}
+train_data_DVH <- as.data.frame(unclass(train_data_DVH), stringsAsFactors = TRUE)
+head(train_data_DVH,3)
+test_data_DVH <- as.data.frame(unclass(test_data_DVH), stringsAsFactors = TRUE)
+head(test_data_DVH,3)
+```
+
+**Interpretation**
+
+DM_DVH (char) --\> DM_DVH (fctr)\
+HZ_DVH (char) --\> HZ_DVH (fctr)\
+CR_DVH (char) --\> CR_DVH (fctr)
+
+```{r}
+full_model_DVH = lm(DL_DVH ~ . ,
+            data=train_data_DVH, na.action=na.omit)
+
+back_model_DVH = step(full_model_DVH, direction="backward", details=TRUE)
+```
+
+**Interpretation**
+
+Two models are created above with Full model and Backword selection process. This is build using training set (train_data_DVH) from original data.
+
+```{r}
+# RMSE on Train data
+pred_train_DVH <- predict(full_model_DVH, newdata=train_data_DVH)
+RMSE_train_full_DVH <- sqrt(mean((train_data_DVH$DL_DVH - pred_train_DVH)^2))
+
+# RMSE on Test data
+pred_test_DVH <- predict(full_model_DVH, newdata=test_data_DVH)
+RMSE_test_full_DVH <- sqrt(mean((test_data_DVH$DL_DVH - pred_test_DVH)^2))
+
+
+
+# RMSE on Train data
+pred_train_DVH <- predict(back_model_DVH, newdata=train_data_DVH)
+RMSE_train_back_DVH <- sqrt(mean((train_data_DVH$DL_DVH - pred_train_DVH)^2))
+
+# RMSE on Test data
+pred_test_DVH <- predict(back_model_DVH, newdata=test_data_DVH)
+RMSE_test_back_DVH <- sqrt(mean((test_data_DVH$DL_DVH - pred_test_DVH)^2))
+```
+
+```{r}
+cat("-----------------------------------Full Model-------------------------------------")
+summary(full_model_DVH)
+
+print(paste0("RMSE Train: ",round(RMSE_train_full_DVH,3)))
+print(paste0("RMSE Test: ",round(RMSE_test_full_DVH,3)))
+
+cat("-----------------------------------Backward Selection Model-----------------------------------")
+summary(back_model_DVH)
+
+print(paste0("RMSE Train: ",round(RMSE_train_back_DVH,2)))
+print(paste0("RMSE Test: ",round(RMSE_test_back_DVH,2)))
+```
+
+**Interpretation**
+
+-   The first model (Full Model) has 8 predictor variables and an adjusted R-squared of 0.4584, indicating that about 45.84% of the variability in the response variable is explained by the predictor variables. The F-statistic is significant at p \< 2.2e-16, indicating that at least one of the predictor variables is significantly related to the response variable. The RMSE for the training set is 1.246 and for the test set is 1.195.
+
+-   The second model (Backward Selection Model) has 6 predictor variables and an adjusted R-squared of 0.46, indicating that about 46.0% of the variability in the response variable is explained by the predictor variables. The F-statistic is significant at p \< 2.2e-16, indicating that at least one of the predictor variables is significantly related to the response variable. The RMSE for the training set is 1.25 and for the test set is 1.2.
+
+Comparing the two models, i see that the second model has a slightly higher adjusted R-squared and slightly lower RMSE for the training set, but a slightly higher RMSE for the test set. Additionally, the second model has fewer predictor variables, which could be desirable for simplicity.
+
+However, in terms of the predictor variables that are included, and it is possible that different predictor variables may be more or less important depending on the specific context of the analysis. Therefore, the best model would ultimately depend on a variety of factors and should be selected based on the specific needs of the analysis.
+
+## 4. Model Evaluation -- Verifying Assumptions - Multivariate
+
+```{r}
+# Full Model
+par(mfrow = c(2, 2))  
+plot(full_model_DVH)  
+par(mfrow = c(1, 1))  
+
+# Backword Model
+par(mfrow = c(2, 2))  
+plot(back_model_DVH)  
+par(mfrow = c(1, 1))  
+```
+
+**Interpretation**
+
+Error terms mean of zero: In both models, the residuals vs. fitted values plots show no clear pattern, indicating that the error terms have a mean of zero.
+
+Constant variance: In the full model, the residuals vs. fitted values plot shows some curvature, indicating that the variance of the error terms may not be constant. In the backward model, the residuals vs. fitted values plot shows a more constant spread of residuals, suggesting that the constant variance assumption may be met.
+
+Normally distributed: In both models, the normal Q-Q plots show some deviation from normality, particularly in the tails, suggesting that the normality assumption may not be fully met.
+
+```{r}
+## Creating Model and Residual vectors ##
+
+full_res_DVH <- residuals(full_model_DVH)
+back_res_DVH <- residuals(back_model_DVH)
+
+
+#Check Normality Numericaly
+shapiro.test(full_res_DVH)
+shapiro.test(back_res_DVH)
+```
+
+**Interpretation**
+
+The Shapiro-Wilk test is commonly used to examine if the error terms in a linear regression model are normally distributed.\
+For both models, the p-values obtained from the test are greater than the usual significance level of 0.05, which means that there is no enough evidence to reject the null hypothesis. Therefore, the normality assumption of the error terms is met for both models.
+
+## 5. Final Recommendation - Multivariate
+
+***Answer:*** The backward selection model is a better choice for making predictions on new data. Because, it has a simpler structure, with only six predictor variables (5/6 passed in t-test), making it easier to interpret and potentially more robust. Additionally, It has higher Adjusted R squared value and lower RMSE value compared to Full model.
